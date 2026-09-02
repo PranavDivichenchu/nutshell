@@ -7,8 +7,15 @@ import SwiftUI
 /// records, this is the only layout that stays honest: a well-documented product gets a
 /// rich page, a bare one gets a short page, and neither shows empty scaffolding.
 struct ProductDetailView: View {
-    let product: Product
+    let searchResult: Product
 
+    /// A fuller record fetched by barcode, when the search result was partial.
+    @State private var enriched: Product?
+
+    /// What the screen actually renders: the richer of the two.
+    private var product: Product { enriched ?? searchResult }
+
+    @Environment(\.foodFactsService) private var service
     @Environment(SavedProductsStore.self) private var saved
     @Environment(CompareStore.self) private var compare
     @Environment(ProfileStore.self) private var profile
@@ -58,7 +65,7 @@ struct ProductDetailView: View {
                         title: "Contains",
                         systemImage: "exclamationmark.triangle",
                         items: product.allergenLabels,
-                        tint: Color(light: 0xC2410C, dark: 0xF07C58)
+                        tint: Theme.warning
                     )
                 }
 
@@ -103,8 +110,15 @@ struct ProductDetailView: View {
         .navigationTitle(product.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbar }
-        .task {
-            recentlyViewed.record(product)
+        .task(id: searchResult.code) {
+            recentlyViewed.record(searchResult)
+
+            // Progressive enhancement: the page is already usable, so a failure here
+            // costs nothing and is deliberately not surfaced as an error.
+            guard searchResult.needsDetailEnrichment else { return }
+            if let full = try? await service.product(barcode: searchResult.code) {
+                enriched = full
+            }
         }
     }
 
@@ -168,7 +182,7 @@ struct ProductDetailView: View {
                 .frame(maxWidth: .infinity)
 
             VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
-                if let brand = product.brand {
+                if let brand = product.displayBrand {
                     Text(brand.uppercased())
                         .font(.display(.caption, weight: .bold))
                         .kerning(0.8)
@@ -304,6 +318,8 @@ struct ProductDetailView: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.tight) {
             Text("Barcode \(product.code)")
                 .font(.caption.monospacedDigit())
+                // Otherwise VoiceOver reads it as one thirteen-digit cardinal number.
+                .accessibilityLabel(Text("Barcode ") + Text(product.code).speechSpellsOutCharacters())
             Link(destination: openFoodFactsURL) {
                 HStack(spacing: 4) {
                     Text("View on Open Food Facts")
@@ -315,7 +331,7 @@ struct ProductDetailView: View {
             // Open Food Facts data is ODbL-licensed and requires attribution.
             Text("Data from Open Food Facts, licensed under the Open Database License (ODbL).")
                 .font(.caption2)
-                .foregroundStyle(Theme.secondaryText.opacity(0.85))
+                .foregroundStyle(Theme.tertiaryText)
         }
         .foregroundStyle(Theme.secondaryText)
         .padding(.top, Theme.Spacing.tight)

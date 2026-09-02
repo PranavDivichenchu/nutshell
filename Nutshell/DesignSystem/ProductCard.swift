@@ -28,7 +28,7 @@ struct ProductCard: View {
 
             HStack(spacing: 5) {
                 if let score = product.nutriScore {
-                    NutriScoreTile(score: score, size: 18)
+                    NutriScoreTile(score: score, baseSize: 18)
                 }
                 if let brand = product.brand {
                     Text(brand)

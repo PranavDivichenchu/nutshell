@@ -44,6 +44,20 @@ enum Nutrient: String, CaseIterable, Identifiable, Sendable {
     }
 
     var unit: NutrientUnit { self == .energy ? .kilocalories : .grams }
+
+    /// The API keys this nutrient can arrive under, in preference order.
+    ///
+    /// Products imported from the US taxonomy store carbohydrates as
+    /// `carbohydrates-total`, which otherwise renders an empty Carbohydrates row sitting
+    /// directly above a populated Sugars sub-row.
+    var apiKeys: [String] {
+        switch self {
+        case .carbohydrates: ["carbohydrates", "carbohydrates-total"]
+        case .fiber: ["fiber", "dietary-fiber"]
+        case .energy: ["energy-kcal"]
+        default: [rawValue]
+        }
+    }
 }
 
 enum NutrientUnit: Sendable {
@@ -106,9 +120,14 @@ struct Nutriments: Codable, Hashable, Sendable {
     /// The amount of a nutrient for the given basis, or `nil` when the contributor
     /// never filled it in — which is common enough that callers must handle it.
     func amount(of nutrient: Nutrient, per basis: NutritionBasis) -> Double? {
-        values[nutrient.rawValue + basis.apiSuffix]
-            // Energy is sometimes only present in kilojoules; convert rather than show nothing.
-            ?? (nutrient == .energy ? values["energy" + basis.apiSuffix].map { $0 / 4.184 } : nil)
+        for key in nutrient.apiKeys {
+            if let value = values[key + basis.apiSuffix] { return value }
+        }
+        // Energy is sometimes only present in kilojoules; convert rather than show nothing.
+        if nutrient == .energy, let kilojoules = values["energy" + basis.apiSuffix] {
+            return kilojoules / 4.184
+        }
+        return nil
     }
 
     func formattedAmount(of nutrient: Nutrient, per basis: NutritionBasis) -> String? {

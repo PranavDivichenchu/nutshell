@@ -26,7 +26,7 @@ struct SearchView: View {
                 CompareTray(isShowingComparison: $isShowingComparison)
             }
             .navigationTitle("Search")
-            .navigationDestination(for: Product.self) { ProductDetailView(product: $0) }
+            .navigationDestination(for: Product.self) { ProductDetailView(searchResult: $0) }
             .toolbar { toolbar }
             .searchable(
                 text: $viewModel.query,

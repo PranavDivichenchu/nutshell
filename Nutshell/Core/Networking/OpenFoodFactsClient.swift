@@ -88,7 +88,8 @@ struct OpenFoodFactsClient: FoodFactsService {
         // v2 answers 404 for an unknown barcode, which is an answer, not a failure.
         case 404: return nil
         case 200...299: break
-        case 429, 500...599: throw APIError.serviceUnavailable
+        case 429: throw APIError.rateLimited
+        case 500...599: throw APIError.serviceUnavailable
         default: throw APIError.unexpected(statusCode: http.statusCode)
         }
 
@@ -144,6 +145,9 @@ struct OpenFoodFactsClient: FoodFactsService {
             URLQueryItem(name: "page_size", value: String(pageSize)),
             URLQueryItem(name: "page", value: String(page)),
             URLQueryItem(name: "fields", value: fields),
+            // Ask for the caller's language where a translation exists; without this,
+            // popular products come back with French ingredient lists.
+            URLQueryItem(name: "lc", value: "en"),
         ]
         guard let url = components.url else { throw APIError.unreadableResponse }
 
@@ -162,19 +166,21 @@ struct OpenFoodFactsClient: FoodFactsService {
 
         let page = response.page?.value ?? requestedPage
         let total = response.count?.value ?? usable.count
-        let pageCount = response.pageCount?.value
 
-        let hasMore = if let pageCount {
-            page < pageCount
+        // Derived from the total rather than from `page_count`: on the legacy endpoint
+        // that field is the number of products on this page, not the number of pages,
+        // so trusting it stopped paging at 400 results.
+        let hasMore = if let count = response.count?.value {
+            page * pageSize < count
         } else {
-            // Without a page count, a full page implies there is probably another.
+            // Without a total, a full page implies there is probably another.
             response.products.count >= pageSize
         }
 
         return SearchPage(products: usable, page: page, totalCount: total, hasMorePages: hasMore)
     }
 
-    private static func mapped(_ error: URLError) -> Error {
+    static func mapped(_ error: URLError) -> Error {
         switch error.code {
         case .cancelled: CancellationError()
         case .notConnectedToInternet, .networkConnectionLost, .dataNotAllowed: APIError.offline

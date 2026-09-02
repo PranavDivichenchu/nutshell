@@ -17,8 +17,9 @@ final class SearchViewModel {
     }
 
     /// Long enough that an average typist triggers one request per word rather than
-    /// per keystroke, which matters because this endpoint rate-limits aggressively.
-    private static let debounce = Duration.milliseconds(350)
+    /// per keystroke. Open Food Facts documents a 10 requests/minute cap on search whose
+    /// stated penalty is an IP ban, so 150ms of extra latency is a cheap trade.
+    private static let debounce = Duration.milliseconds(500)
 
     /// One character matches nearly everything and wastes a request.
     private static let minimumQueryLength = 2
@@ -30,7 +31,19 @@ final class SearchViewModel {
     private var loadedProducts: [Product] = []
     private var currentPage = 1
     private var hasMorePages = false
-    private var activeQuery = ""
+
+    /// The query whose results are currently on screen.
+    ///
+    /// Deliberately only assigned once a search *completes*. An earlier version recorded
+    /// the term before awaiting, so a search cancelled mid-flight — by a tab switch, say —
+    /// left the term recorded with no results and no request outstanding, and the
+    /// de-duplication guard below then refused to ever run it again. The screen sat on
+    /// the loading skeleton forever.
+    private var completedQuery = ""
+
+    /// Identifies the newest request. Responses carrying a stale token are dropped, so a
+    /// slow earlier search can never overwrite a newer one's results.
+    private var currentToken = 0
 
     private let service: FoodFactsService
     private let recentSearches: RecentSearchesStore
@@ -55,8 +68,9 @@ final class SearchViewModel {
             return
         }
 
-        // Re-running the same search (e.g. on view reappearance) should not flicker.
-        guard trimmed != activeQuery else { return }
+        // Skip only when this query's results are genuinely on screen — not merely
+        // because it was attempted once.
+        if trimmed == completedQuery, case .results = phase { return }
 
         do {
             try await Task.sleep(for: Self.debounce)
@@ -71,21 +85,24 @@ final class SearchViewModel {
     /// button and by tapping a recent search.
     func searchNow() async {
         guard let trimmed = query.trimmed.nilIfBlank else { return }
-        activeQuery = ""
         await performSearch(trimmed)
     }
 
     private func performSearch(_ term: String) async {
+        currentToken &+= 1
+        let token = currentToken
+
         phase = .searching
-        activeQuery = term
 
         do {
             let page = try await service.search(term, page: 1)
-            guard !Task.isCancelled else { return }
+            // A response that has been superseded must not touch any state.
+            guard token == currentToken, !Task.isCancelled else { return }
 
             loadedProducts = page.products
             currentPage = page.page
             hasMorePages = page.hasMorePages
+            completedQuery = term
 
             if page.products.isEmpty {
                 phase = .noResults(query: term)
@@ -94,10 +111,10 @@ final class SearchViewModel {
                 recentSearches.record(term)
             }
         } catch is CancellationError {
+            // Leave `completedQuery` untouched so this term can be attempted again.
             return
         } catch {
-            guard !Task.isCancelled else { return }
-            activeQuery = "" // Allow an identical query to be retried.
+            guard token == currentToken, !Task.isCancelled else { return }
             phase = .failed(error as? APIError ?? .unreadableResponse)
         }
     }
@@ -118,12 +135,13 @@ final class SearchViewModel {
 
     private func loadMore() async {
         guard hasMorePages, !isLoadingMore else { return }
+        let token = currentToken
         isLoadingMore = true
         defer { isLoadingMore = false }
 
         do {
-            let next = try await service.search(activeQuery, page: currentPage + 1)
-            guard !Task.isCancelled, case .results = phase else { return }
+            let next = try await service.search(completedQuery, page: currentPage + 1)
+            guard token == currentToken, !Task.isCancelled, case .results = phase else { return }
 
             // The API can repeat products across pages; de-duplicate by barcode so
             // SwiftUI never sees two rows with the same identity.
@@ -133,7 +151,12 @@ final class SearchViewModel {
             currentPage = next.page
             hasMorePages = next.hasMorePages
             phase = .results(loadedProducts, total: next.totalCount)
+        } catch is CancellationError {
+            // A scroll that moved on is not a paging failure; leave paging enabled so
+            // the next prefetch can try again.
+            return
         } catch {
+            guard token == currentToken else { return }
             // A failed page shouldn't discard results already on screen; stop paging quietly.
             hasMorePages = false
         }
@@ -151,8 +174,9 @@ final class SearchViewModel {
     }
 
     private func reset() {
+        currentToken &+= 1   // abandon anything in flight
         loadedProducts = []
-        activeQuery = ""
+        completedQuery = ""
         currentPage = 1
         hasMorePages = false
         phase = .idle

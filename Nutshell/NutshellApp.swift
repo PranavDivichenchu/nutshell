@@ -5,7 +5,12 @@ struct NutshellApp: App {
     /// Composition root: the one place the live API client is chosen. Everything
     /// downstream depends on the `FoodFactsService` protocol, so previews and tests can
     /// substitute their own without touching a view.
-    private let service: FoodFactsService = OpenFoodFactsClient()
+    /// The endpoint named in the brief stays primary; Search-a-licious catches the
+    /// roughly one request in three that it drops.
+    private let service: FoodFactsService = FallbackFoodFactsService(
+        primary: OpenFoodFactsClient(),
+        fallback: SearchALiciousClient()
+    )
 
     @State private var saved = SavedProductsStore()
     @State private var recentSearches = RecentSearchesStore()
@@ -23,6 +28,7 @@ struct NutshellApp: App {
                 .environment(profile)
                 .environment(compare)
                 .environment(router)
+                .environment(\.foodFactsService, service)
                 .tint(Theme.accent)
         }
     }

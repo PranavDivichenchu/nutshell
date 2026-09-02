@@ -43,7 +43,7 @@ struct ScanView: View {
                     Button("Close") { dismiss() }.tint(Theme.accent)
                 }
             }
-            .navigationDestination(item: $pushedProduct) { ProductDetailView(product: $0) }
+            .navigationDestination(item: $pushedProduct) { ProductDetailView(searchResult: $0) }
             .task { await viewModel.requestCameraAccessIfNeeded() }
             .onChange(of: photoItem) { _, item in
                 guard let item else { return }

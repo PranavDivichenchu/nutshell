@@ -48,7 +48,7 @@ struct HomeView: View {
                 }
             }
             .navigationTitle("Nutshell")
-            .navigationDestination(for: Product.self) { ProductDetailView(product: $0) }
+            .navigationDestination(for: Product.self) { ProductDetailView(searchResult: $0) }
         }
     }
 

@@ -9,19 +9,37 @@ import Foundation
 enum Lenient {
 
     /// Decodes a number that may be encoded as `Double`, `Int`, `Bool`, or `String`.
+    ///
+    /// Non-finite values are rejected. `JSONEncoder` cannot represent NaN or infinity, so
+    /// letting one through would silently break the saved-products file on every
+    /// subsequent write — the list would simply stop persisting, with no error anywhere.
     static func double(from container: SingleValueDecodingContainer) -> Double? {
-        if let value = try? container.decode(Double.self) { return value }
+        if let value = try? container.decode(Double.self) { return value.isFinite ? value : nil }
         if let value = try? container.decode(Int.self) { return Double(value) }
-        if let value = try? container.decode(String.self) { return Double(value.trimmed) }
+        if let value = try? container.decode(String.self) {
+            return Double(value.trimmed).flatMap { $0.isFinite ? $0 : nil }
+        }
         return nil
     }
 
     /// Decodes an integer that may be encoded as `Int`, `Double`, or `String`.
+    ///
+    /// `Int(Double)` traps on NaN and on anything outside `Int`'s range, so the
+    /// conversion is guarded rather than trusted — this is parsing hostile input.
     static func int(from container: SingleValueDecodingContainer) -> Int? {
         if let value = try? container.decode(Int.self) { return value }
-        if let value = try? container.decode(Double.self) { return Int(value) }
-        if let value = try? container.decode(String.self) { return Int(value.trimmed) }
+        if let value = try? container.decode(Double.self) { return exactInt(value) }
+        if let value = try? container.decode(String.self) {
+            if let integer = Int(value.trimmed) { return integer }
+            return Double(value.trimmed).flatMap(exactInt)
+        }
         return nil
+    }
+
+    private static func exactInt(_ value: Double) -> Int? {
+        guard value.isFinite,
+              value >= Double(Int.min), value <= Double(Int.max) else { return nil }
+        return Int(value)
     }
 }
 
@@ -49,6 +67,33 @@ struct LenientInt: Codable, Hashable, Sendable {
 
     init(from decoder: Decoder) throws {
         value = Lenient.int(from: try decoder.singleValueContainer())
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        if let value { try container.encode(value) } else { try container.encodeNil() }
+    }
+}
+
+/// A string that may arrive as a string or as an array of strings.
+///
+/// `brands` is comma-joined text on the legacy search endpoint and a real array on
+/// Search-a-licious. Absorbing both here means the rest of the app never learns which
+/// backend a product came from.
+struct LenientString: Codable, Hashable, Sendable {
+    let value: String?
+
+    init(_ value: String?) { self.value = value }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let single = try? container.decode(String.self) {
+            value = single.nilIfBlank
+        } else if let list = try? container.decode([String].self) {
+            value = list.compactMap(\.nilIfBlank).joined(separator: ", ").nilIfBlank
+        } else {
+            value = nil
+        }
     }
 
     func encode(to encoder: Encoder) throws {

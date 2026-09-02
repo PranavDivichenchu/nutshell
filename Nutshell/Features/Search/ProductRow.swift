@@ -11,10 +11,14 @@ struct ProductRow: View {
     var isComparing: Bool = false
     var verdict: ProductVerdict?
 
+    /// The thumbnail and grade tile are fixed sizes in a fixed-width row; without
+    /// scaling they crowd the text off the row entirely at accessibility sizes.
+    @ScaledMetric(relativeTo: .subheadline) private var thumbnail: CGFloat = 62
+
     var body: some View {
         HStack(spacing: Theme.Spacing.medium) {
             ProductImage(url: product.thumbnailURL)
-                .frame(width: 62, height: 62)
+                .frame(width: thumbnail, height: thumbnail)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(product.name)
@@ -60,7 +64,7 @@ struct ProductRow: View {
                     // which would read as an app bug rather than as missing data.
                     Text("–")
                         .font(.system(size: 17, weight: .heavy, design: .rounded))
-                        .foregroundStyle(Theme.secondaryText.opacity(0.5))
+                        .foregroundStyle(Theme.tertiaryText)
                         .frame(width: 28, height: 28)
                         .background(Theme.surfaceRaised, in: .rect(cornerRadius: 8))
                         .accessibilityLabel("No Nutri-Score available")

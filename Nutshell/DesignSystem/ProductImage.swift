@@ -41,6 +41,6 @@ struct ProductImage: View {
     private var placeholder: some View {
         Image(systemName: "takeoutbag.and.cup.and.straw")
             .font(.title3)
-            .foregroundStyle(Theme.secondaryText.opacity(0.5))
+            .foregroundStyle(Theme.tertiaryText)
     }
 }

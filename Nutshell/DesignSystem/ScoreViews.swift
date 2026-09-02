@@ -1,14 +1,49 @@
 import SwiftUI
 
+/// One cell of a grade scale.
+///
+/// Every swatch keeps its full colour and its own readable glyph colour; the selected
+/// one is larger and ringed. An earlier version dimmed the unselected fills and drew
+/// white on top of them, which measured as low as 1.14:1 — effectively invisible.
+private struct GradeSwatch: View {
+    let text: String
+    let fill: Color
+    let foreground: Color
+    let isActive: Bool
+
+    @ScaledMetric(relativeTo: .headline) private var scale: CGFloat = 1
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: (isActive ? 22 : 15) * scale, weight: .heavy, design: .rounded))
+            .foregroundStyle(foreground)
+            .frame(width: (isActive ? 44 : 32) * scale, height: (isActive ? 52 : 38) * scale)
+            .background(fill.opacity(isActive ? 1 : 0.55), in: .rect(cornerRadius: 10))
+            .overlay {
+                if isActive {
+                    RoundedRectangle(cornerRadius: 10)
+                        .strokeBorder(Theme.primaryText.opacity(0.55), lineWidth: 2)
+                }
+            }
+            .accessibilityHidden(true)
+    }
+}
+
 /// The compact Nutri-Score letter tile used in list rows.
 struct NutriScoreTile: View {
     let score: NutriScore
-    var size: CGFloat = 28
+    var baseSize: CGFloat = 28
+
+    /// The grade is the densest signal in a row, so it has to grow with Dynamic Type
+    /// like everything around it rather than staying pinned at one size.
+    @ScaledMetric(relativeTo: .headline) private var scale: CGFloat = 1
+
+    private var size: CGFloat { baseSize * scale }
 
     var body: some View {
         Text(score.letter)
             .font(.system(size: size * 0.6, weight: .heavy, design: .rounded))
-            .foregroundStyle(.white)
+            .foregroundStyle(score.onColor)
             .frame(width: size, height: size)
             .background(score.color, in: .rect(cornerRadius: size * 0.28))
             .accessibilityLabel("Nutri-Score \(score.letter)")
@@ -25,13 +60,12 @@ struct NutriScoreScale: View {
     var body: some View {
         HStack(spacing: 4) {
             ForEach(NutriScore.allCases) { grade in
-                let isActive = grade == score
-                Text(grade.letter)
-                    .font(.system(size: isActive ? 22 : 15, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.white)
-                    .frame(width: isActive ? 44 : 32, height: isActive ? 52 : 38)
-                    .background(grade.color.opacity(isActive ? 1 : 0.35), in: .rect(cornerRadius: 10))
-                    .scaleEffect(isActive ? 1 : 0.96)
+                GradeSwatch(
+                    text: grade.letter,
+                    fill: grade.color,
+                    foreground: grade.onColor,
+                    isActive: grade == score
+                )
             }
         }
         .animation(.snappy, value: score)
@@ -47,12 +81,12 @@ struct NovaScale: View {
     var body: some View {
         HStack(spacing: 4) {
             ForEach(NovaGroup.allCases) { candidate in
-                let isActive = candidate == group
-                Text("\(candidate.rawValue)")
-                    .font(.system(size: isActive ? 20 : 14, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.white)
-                    .frame(width: isActive ? 44 : 32, height: isActive ? 52 : 38)
-                    .background(candidate.color.opacity(isActive ? 1 : 0.3), in: .rect(cornerRadius: 10))
+                GradeSwatch(
+                    text: "\(candidate.rawValue)",
+                    fill: candidate.color,
+                    foreground: candidate.onColor,
+                    isActive: candidate == group
+                )
             }
         }
         .accessibilityElement(children: .ignore)
@@ -67,12 +101,12 @@ struct EcoScoreScale: View {
     var body: some View {
         HStack(spacing: 4) {
             ForEach(EcoScore.allCases) { grade in
-                let isActive = grade == score
-                Text(grade.letter)
-                    .font(.system(size: isActive ? 22 : 15, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.white)
-                    .frame(width: isActive ? 44 : 32, height: isActive ? 52 : 38)
-                    .background(grade.color.opacity(isActive ? 1 : 0.3), in: .rect(cornerRadius: 10))
+                GradeSwatch(
+                    text: grade.letter,
+                    fill: grade.color,
+                    foreground: grade.onColor,
+                    isActive: grade == score
+                )
             }
         }
         .accessibilityElement(children: .ignore)
@@ -104,8 +138,10 @@ struct ScoreExplainerCard<Scale: View>: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(headline)
+                        // The raw score colours are chosen to sit under a glyph, not on
+                        // the page — the yellows fail badly as text in light mode.
                         .font(.display(.headline))
-                        .foregroundStyle(tint)
+                        .foregroundStyle(Theme.primaryText)
                     Text(detail)
                         .font(.footnote)
                         .foregroundStyle(Theme.secondaryText)
@@ -113,6 +149,9 @@ struct ScoreExplainerCard<Scale: View>: View {
                 }
             }
         }
+        // One sentence rather than the grade announced once per swatch.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(title). \(headline). \(detail)")
     }
 }
 
@@ -122,12 +161,59 @@ struct NutrientLevelRow: View {
     let level: NutrientLevel
     let amount: String?
 
+    @Environment(\.dynamicTypeSize) private var typeSize
+
     var body: some View {
+        // At accessibility sizes the three columns cannot coexist on one line, so they
+        // stack rather than each truncating to a fragment.
+        if typeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: Theme.Spacing.small) {
+                    levelDot
+                    Text(nutrient.label)
+                        .font(.subheadline)
+                        .foregroundStyle(Theme.primaryText)
+                }
+                HStack(spacing: Theme.Spacing.small) {
+                    if let amount {
+                        Text(amount)
+                            .font(.subheadline.monospacedDigit())
+                            .foregroundStyle(Theme.secondaryText)
+                    }
+                    levelTag
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(accessibilityText)
+        } else {
+            compactBody
+        }
+    }
+
+    private var levelDot: some View {
+        Circle()
+            .fill(level.color)
+            .frame(width: 12, height: 12)
+            .overlay { Circle().strokeBorder(level.color.opacity(0.3), lineWidth: 4) }
+            .accessibilityHidden(true)
+    }
+
+    private var levelTag: some View {
+        Text(level.label)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(level.color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(level.color.opacity(0.12), in: .capsule)
+    }
+
+    private var accessibilityText: String {
+        "\(nutrient.label): \(level.label)\(amount.map { ", \($0)" } ?? "")"
+    }
+
+    private var compactBody: some View {
         HStack(spacing: Theme.Spacing.small) {
-            Circle()
-                .fill(level.color)
-                .frame(width: 12, height: 12)
-                .overlay { Circle().strokeBorder(level.color.opacity(0.3), lineWidth: 4) }
+            levelDot
 
             Text(nutrient.label)
                 .font(.subheadline)
@@ -141,14 +227,9 @@ struct NutrientLevelRow: View {
                     .foregroundStyle(Theme.secondaryText)
             }
 
-            Text(level.label)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(level.color)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(level.color.opacity(0.12), in: .capsule)
+            levelTag
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(nutrient.label): \(level.label)\(amount.map { ", \($0)" } ?? "")")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityText)
     }
 }

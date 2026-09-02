@@ -18,6 +18,45 @@ extension Color {
     }
 }
 
+extension Color {
+    /// The WCAG relative luminance of a packed 24-bit RGB value.
+    static func relativeLuminance(of hex: UInt32) -> Double {
+        func linear(_ channel: UInt32) -> Double {
+            let value = Double(channel) / 255
+            return value <= 0.03928 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * linear((hex >> 16) & 0xFF)
+            + 0.7152 * linear((hex >> 8) & 0xFF)
+            + 0.0722 * linear(hex & 0xFF)
+    }
+
+    /// The WCAG contrast ratio between two packed RGB values, 1...21.
+    static func contrastRatio(_ a: UInt32, _ b: UInt32) -> Double {
+        let la = relativeLuminance(of: a)
+        let lb = relativeLuminance(of: b)
+        return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+    }
+
+    /// Near-black, used instead of pure black so dark text on a bright badge still
+    /// belongs to the palette.
+    static let inkHex: UInt32 = 0x11150F
+
+    /// Whether dark text out-contrasts white text on this background.
+    static func prefersDarkForeground(on hex: UInt32) -> Bool {
+        contrastRatio(hex, inkHex) > contrastRatio(hex, 0xFFFFFF)
+    }
+
+    /// Black or white, whichever has the higher WCAG contrast ratio against `hex`.
+    ///
+    /// The score palettes are fixed by the standards they come from, and several of them
+    /// — Nutri-Score C's yellow most of all — sit at barely 1.6:1 against white text.
+    /// Picking the foreground from the background's luminance keeps every badge legible
+    /// without inventing off-brand colours.
+    static func readableForeground(on hex: UInt32) -> Color {
+        prefersDarkForeground(on: hex) ? Color(hex: inkHex) : .white
+    }
+}
+
 /// The app's visual constants, kept in one place so spacing and colour stay consistent
 /// across screens without every view inventing its own numbers.
 enum Theme {
@@ -39,6 +78,16 @@ enum Theme {
     static let accent = Color(light: 0x1D7A44, dark: 0x4FBF7B)
     static let primaryText = Color(light: 0x14171A, dark: 0xF2F4F5)
     static let secondaryText = Color(light: 0x6B7075, dark: 0x9BA2A8)
+    /// A real third tier, rather than `secondaryText.opacity(0.5)`, which measured
+    /// under 3:1 everywhere it was used.
+    static let tertiaryText = Color(light: 0x82888E, dark: 0x7E858B)
+    /// Used for allergens and anything else the reader must not miss. Adaptive, unlike
+    /// the hard-coded literal it replaces — that failed contrast in dark mode on the
+    /// single most safety-relevant text in the app.
+    static let warning = Color(light: 0xC2410C, dark: 0xFF8A5B)
+    /// Fill for solid buttons. Fixed rather than adaptive because white sits on it: the
+    /// light-mode accent is bright enough in dark mode to drop white text to ~2.3:1.
+    static let accentFill = Color(hex: 0x1D7A44)
 
     // MARK: - Metrics
 
@@ -102,6 +151,7 @@ struct SectionCard<Content: View>: View {
                     Image(systemName: systemImage)
                         .font(.caption)
                         .foregroundStyle(tint)
+                        .accessibilityHidden(true)
                 }
                 Text(title)
                     .font(.display(.subheadline, weight: .bold))
@@ -129,11 +179,17 @@ struct Pill: View {
     let text: String
     var systemImage: String?
     var tint: Color = Theme.accent
+    /// Set on pills that are buttons. The drawn capsule keeps its compact size; the
+    /// tappable area grows to the 44pt minimum, so decorative pills in the detail view
+    /// are unaffected.
+    var isInteractive = false
 
     var body: some View {
         HStack(spacing: 5) {
             if let systemImage {
-                Image(systemName: systemImage).font(.caption2)
+                Image(systemName: systemImage)
+                    .font(.caption2)
+                    .accessibilityHidden(true)
             }
             Text(text)
                 .font(.footnote.weight(.medium))
@@ -145,6 +201,8 @@ struct Pill: View {
         .overlay {
             Capsule().strokeBorder(tint.opacity(0.22), lineWidth: 1)
         }
+        .frame(minHeight: isInteractive ? 44 : nil)
+        .contentShape(.rect)
     }
 }
 
@@ -164,12 +222,25 @@ struct FlowLayout: Layout {
         for row in arrange(subviews: subviews, width: bounds.width) {
             var x = bounds.minX
             for index in row.indices {
-                let size = subviews[index].sizeThatFits(.unspecified)
-                subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+                let size = measure(subviews[index], within: bounds.width)
+                // Propose the clamped width so an over-long item wraps its own text
+                // instead of drawing past the edge of the card it sits in.
+                subviews[index].place(
+                    at: CGPoint(x: x, y: y),
+                    proposal: ProposedViewSize(width: size.width, height: size.height)
+                )
                 x += size.width + spacing
             }
             y += row.height + spacing
         }
+    }
+
+    /// An item is never allowed to claim more than the container's width — a single
+    /// long allergen or category name would otherwise overflow horizontally.
+    private func measure(_ subview: LayoutSubview, within width: CGFloat) -> CGSize {
+        let ideal = subview.sizeThatFits(.unspecified)
+        guard width.isFinite, ideal.width > width else { return ideal }
+        return subview.sizeThatFits(ProposedViewSize(width: width, height: nil))
     }
 
     private struct Row {
@@ -183,7 +254,7 @@ struct FlowLayout: Layout {
         var current = Row()
 
         for index in subviews.indices {
-            let size = subviews[index].sizeThatFits(.unspecified)
+            let size = measure(subviews[index], within: width)
             let projected = current.indices.isEmpty ? size.width : current.width + spacing + size.width
 
             if projected > width, !current.indices.isEmpty {

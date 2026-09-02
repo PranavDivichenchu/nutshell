@@ -30,7 +30,7 @@ struct IngredientsCard: View {
             let lower = attributed.index(attributed.startIndex, offsetByCharacters: range.lowerBound)
             let upper = attributed.index(attributed.startIndex, offsetByCharacters: range.upperBound)
             attributed[lower..<upper].font = .subheadline.bold()
-            attributed[lower..<upper].foregroundColor = Color(hex: 0xC2410C)
+            attributed[lower..<upper].foregroundColor = Theme.warning
         }
 
         return attributed

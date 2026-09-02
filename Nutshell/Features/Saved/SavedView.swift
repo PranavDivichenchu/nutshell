@@ -10,6 +10,9 @@ struct SavedView: View {
     @Environment(ProfileStore.self) private var profile
 
     @State private var isShowingComparison = false
+    /// Owned locally so it can be forced back off when the list empties — otherwise
+    /// deleting the last row leaves edit mode on with no Done button to leave it.
+    @State private var editMode: EditMode = .inactive
 
     var body: some View {
         NavigationStack {
@@ -45,8 +48,12 @@ struct SavedView: View {
             .safeAreaInset(edge: .bottom) {
                 CompareTray(isShowingComparison: $isShowingComparison)
             }
+            .environment(\.editMode, $editMode)
+            .onChange(of: saved.products.isEmpty) { _, isEmpty in
+                if isEmpty { editMode = .inactive }
+            }
             .navigationTitle("Saved")
-            .navigationDestination(for: Product.self) { ProductDetailView(product: $0) }
+            .navigationDestination(for: Product.self) { ProductDetailView(searchResult: $0) }
             .toolbar {
                 if !saved.products.isEmpty {
                     ToolbarItem(placement: .topBarTrailing) { EditButton().tint(Theme.accent) }

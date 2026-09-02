@@ -120,12 +120,20 @@ struct GradeTests {
     }
 
     @Test("Placeholder grades are treated as missing, not rendered", arguments: [
-        "unknown", "not-applicable", "", "   ", "f", "1",
+        "unknown", "not-applicable", "", "   ", "1",
     ])
     func placeholderGrades(input: String) {
         // These all appear in real payloads; showing them as a badge would be a lie.
         #expect(NutriScore(apiValue: input) == nil)
         #expect(EcoScore(apiValue: input) == nil)
+    }
+
+    @Test("The two scales have different ranges and are not interchangeable")
+    func scaleRangesDiffer() {
+        // Nutri-Score stops at E; Eco-Score has an F grade in the wild.
+        #expect(NutriScore(apiValue: "f") == nil)
+        #expect(EcoScore(apiValue: "f") == .f)
+        #expect(EcoScore(apiValue: "g") == nil)
     }
 
     @Test("A nil grade is missing data")

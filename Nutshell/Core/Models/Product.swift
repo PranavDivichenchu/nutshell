@@ -13,7 +13,7 @@ struct Product: Codable, Identifiable, Hashable, Sendable {
 
     private let rawName: String?
     private let rawGenericName: String?
-    private let rawBrands: String?
+    private let rawBrands: LenientString?
     private let rawQuantity: String?
     private let rawServingSize: String?
     private let rawIngredientsText: String?
@@ -66,7 +66,7 @@ struct Product: Codable, Identifiable, Hashable, Sendable {
 
     /// The API packs multiple brands into one comma-separated string.
     var brand: String? {
-        rawBrands?.nilIfBlank?
+        rawBrands?.value?
             .split(separator: ",")
             .first
             .map(String.init)?
@@ -86,13 +86,19 @@ struct Product: Codable, Identifiable, Hashable, Sendable {
 
     var ingredientsText: String? { rawIngredientsText?.nilIfBlank }
 
-    /// A one-line "Brand · 500 g" caption.
+    /// The brand, unless the product name already begins with it.
     ///
-    /// The brand is dropped when the product name already begins with it, which is
-    /// common in this database and otherwise renders as "Nutella / Nutella".
+    /// Common in this database, and otherwise renders as "NUTELLA" directly above
+    /// "Nutella". Used by both the row subtitle and the detail header so the two cannot
+    /// disagree about it.
+    var displayBrand: String? {
+        guard let brand else { return nil }
+        return name.lowercased().hasPrefix(brand.lowercased()) ? nil : brand
+    }
+
+    /// A one-line "Brand · 500 g" caption.
     var subtitle: String? {
-        let redundantBrand = brand.map { name.lowercased().hasPrefix($0.lowercased()) } ?? false
-        return [redundantBrand ? nil : brand, quantity]
+        [displayBrand, quantity]
             .compactMap { $0 }
             .joined(separator: " · ")
             .nilIfBlank
@@ -176,6 +182,15 @@ struct Product: Codable, Identifiable, Hashable, Sendable {
                   let level = NutrientLevel(rawValue: raw) else { return nil }
             return (nutrient, level)
         }
+    }
+
+    /// Whether this record is missing the fields the search index does not carry.
+    ///
+    /// Search results can come from either backend, and the faster one holds no
+    /// ingredient text, quantity, or additives. Rather than showing a thinner page for
+    /// those, the detail view tops the record up by barcode.
+    var needsDetailEnrichment: Bool {
+        ingredientsText == nil
     }
 
     /// True when the record is too sparse to justify opening a detail view's worth of

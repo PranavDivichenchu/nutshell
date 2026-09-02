@@ -26,9 +26,16 @@ struct SearchIdleView: View {
                         HStack {
                             sectionTitle("Recent")
                             Spacer()
-                            Button("Clear", action: onClearRecents)
-                                .font(.footnote.weight(.medium))
-                                .foregroundStyle(Theme.accent)
+                            Button(action: onClearRecents) {
+                                Text("Clear")
+                                    .font(.footnote.weight(.medium))
+                                    .foregroundStyle(Theme.accent)
+                                    // Destroys every recent search, and had a 33x16pt
+                                    // target before this.
+                                    .padding(.horizontal, 12)
+                                    .frame(minHeight: 44)
+                                    .contentShape(.rect)
+                            }
                         }
 
                         VStack(spacing: 0) {
@@ -38,15 +45,18 @@ struct SearchIdleView: View {
                                         Image(systemName: "clock.arrow.circlepath")
                                             .font(.footnote)
                                             .foregroundStyle(Theme.secondaryText)
+                                            .accessibilityHidden(true)
                                         Text(term)
                                             .foregroundStyle(Theme.primaryText)
                                         Spacer()
                                         Image(systemName: "arrow.up.left")
                                             .font(.caption)
-                                            .foregroundStyle(Theme.secondaryText.opacity(0.6))
+                                            .foregroundStyle(Theme.tertiaryText)
+                                            .accessibilityHidden(true)
                                     }
                                     .font(.subheadline)
-                                    .padding(.vertical, 11)
+                                    .padding(.vertical, 12)
+                                    .frame(minHeight: 44)
                                     .contentShape(.rect)
                                 }
                                 .buttonStyle(.plain)
@@ -70,7 +80,9 @@ struct SearchIdleView: View {
                     FlowLayout(spacing: Theme.Spacing.tight) {
                         ForEach(Self.suggestions, id: \.self) { suggestion in
                             Button { onSelect(suggestion) } label: {
-                                Pill(text: suggestion)
+                                // The only entry point on an empty search screen, so it
+                                // has to clear the minimum target.
+                                Pill(text: suggestion, isInteractive: true)
                             }
                             .buttonStyle(.plain)
                         }
@@ -98,6 +110,7 @@ struct SearchIdleView: View {
 /// doesn't jump when content lands, and the wait reads as progress instead of a stall.
 struct SearchLoadingView: View {
     @State private var isAnimating = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -119,9 +132,11 @@ struct SearchLoadingView: View {
                         .frame(width: 28, height: 28)
                 }
                 .padding(.vertical, Theme.Spacing.small)
-                .opacity(isAnimating ? 0.45 : 1)
+                // A pulse that never stops is exactly what Reduce Motion is for; the
+                // skeleton still communicates "loading" as a static placeholder.
+                .opacity(reduceMotion ? 0.7 : (isAnimating ? 0.45 : 1))
                 .animation(
-                    .easeInOut(duration: 0.85)
+                    reduceMotion ? nil : .easeInOut(duration: 0.85)
                         .repeatForever(autoreverses: true)
                         .delay(Double(index) * 0.06),
                     value: isAnimating
@@ -129,7 +144,7 @@ struct SearchLoadingView: View {
             }
         }
         .padding(.horizontal, Theme.Spacing.medium)
-        .onAppear { isAnimating = true }
+        .onAppear { if !reduceMotion { isAnimating = true } }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Searching")
     }
@@ -149,7 +164,8 @@ struct StatusView: View {
         VStack(spacing: Theme.Spacing.medium) {
             Image(systemName: systemImage)
                 .font(.system(size: 42, weight: .light))
-                .foregroundStyle(Theme.secondaryText.opacity(0.7))
+                .foregroundStyle(Theme.secondaryText)
+                .accessibilityHidden(true)
 
             VStack(spacing: Theme.Spacing.tight) {
                 Text(title)
@@ -162,12 +178,15 @@ struct StatusView: View {
             }
 
             if let actionTitle, let action {
-                Button(actionTitle, action: action)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, Theme.Spacing.large)
-                    .padding(.vertical, Theme.Spacing.small)
-                    .background(Theme.accent, in: .capsule)
+                Button(action: action) {
+                    Text(actionTitle)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, Theme.Spacing.large)
+                        .frame(minHeight: 44)
+                        .background(Theme.accentFill, in: .capsule)
+                }
+                .buttonStyle(.plain)
             }
         }
         .padding(Theme.Spacing.large)

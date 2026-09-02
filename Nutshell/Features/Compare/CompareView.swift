@@ -93,7 +93,7 @@ struct CompareView: View {
         VStack(spacing: 0) {
             comparisonRow(label: "Nutri-Score") { index in
                 if let score = products[index].nutriScore {
-                    NutriScoreTile(score: score, size: 30)
+                    NutriScoreTile(score: score, baseSize: 30)
                 } else {
                     missing
                 }
@@ -104,7 +104,7 @@ struct CompareView: View {
                     VStack(spacing: 2) {
                         Text("\(nova.rawValue)")
                             .font(.system(size: 17, weight: .heavy, design: .rounded))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(nova.onColor)
                             .frame(width: 30, height: 30)
                             .background(nova.color, in: .rect(cornerRadius: 8))
                         Text(nova.title)
@@ -186,7 +186,7 @@ struct CompareView: View {
     private var missing: some View {
         Text("—")
             .font(.footnote)
-            .foregroundStyle(Theme.secondaryText.opacity(0.5))
+            .foregroundStyle(Theme.tertiaryText)
             .accessibilityLabel("Not available")
     }
 

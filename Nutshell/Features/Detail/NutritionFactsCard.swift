@@ -84,7 +84,7 @@ private struct NutritionRow: View {
 
             Text(value ?? "—")
                 .font(.subheadline.monospacedDigit())
-                .foregroundStyle(value == nil ? Theme.secondaryText.opacity(0.5) : Theme.primaryText)
+                .foregroundStyle(value == nil ? Theme.tertiaryText : Theme.primaryText)
         }
         .padding(.vertical, 9)
         .accessibilityElement(children: .combine)

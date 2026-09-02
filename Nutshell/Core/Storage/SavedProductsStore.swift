@@ -14,6 +14,9 @@ final class SavedProductsStore {
     private var savedCodes: Set<String> = []
 
     private let fileURL: URL
+    /// Writes are chained rather than fired independently, so the last snapshot queued
+    /// is always the last one written.
+    private var persistTask: Task<Void, Never>?
 
     init(fileURL: URL = .savedProducts) {
         self.fileURL = fileURL
@@ -57,9 +60,13 @@ final class SavedProductsStore {
     private func persist() {
         let snapshot = products
         let url = fileURL
-        // Writing is fire-and-forget: the in-memory list is the source of truth for the
-        // UI, and a failed write only costs this change on next launch.
-        Task.detached(priority: .utility) {
+        let previous = persistTask
+
+        // The in-memory list stays the source of truth for the UI; the write is
+        // asynchronous, but ordered — each one waits for the previous to finish so two
+        // quick toggles cannot land out of order and leave stale data on disk.
+        persistTask = Task.detached(priority: .utility) {
+            await previous?.value
             guard let data = try? JSONEncoder().encode(snapshot) else { return }
             try? FileManager.default.createDirectory(
                 at: url.deletingLastPathComponent(), withIntermediateDirectories: true

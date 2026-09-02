@@ -1,21 +1,25 @@
-# Open Food Facts Explorer
+# Nutshell
 
-A SwiftUI app for searching the Open Food Facts database. iOS 17+, Swift concurrency, no third-party packages. Open `OpenFoodFacts.xcodeproj` and run.
+*What's actually in your food, in a nutshell.*
 
-## What I prioritized
+A SwiftUI app over the Open Food Facts database. iOS 17+, Swift concurrency, no third-party packages. Open `Nutshell.xcodeproj`; `⌘U` runs the tests.
 
-**Handling the data honestly.** Open Food Facts is volunteer-contributed, so records are wildly uneven — the same field arrives as `3`, `3.0`, or `"3"`, and most products are missing something. Decoding absorbs that at the boundary (`LenientValues.swift`) so the rest of the app uses plain optionals, and every detail section omits itself when empty rather than rendering blank scaffolding.
+## The thesis
 
-**Making the API's flakiness invisible.** Their search endpoint answers roughly one request in three with a 503 HTML page — including requests it served seconds earlier. The client sniffs for non-JSON bodies, retries transient failures twice with backoff, and only then shows an error saying what actually happened. It also requests `fields=`, cutting a 20-result page from ~1 MB to ~3 KB.
+Search plus a detail view makes a database browser. The question people actually have in a shop is narrower — **is this one right for me?** — so everything serves that.
 
-**Search that doesn't hammer the endpoint.** `.task(id: query)` drives a 350 ms debounce, so SwiftUI's cancellation *is* the debounce — no timers to invalidate. Results prefetch three rows before the end.
+Set your allergens and diets once in **You**, and every row, card, and detail screen is checked against them. **Scan** a barcode with the camera, or from a photo. **Compare** two or three products side by side, better figure in bold.
 
-## What I added
+## What I prioritised
 
-Nutri-Score, NOVA, and Eco-Score drawn as their real on-pack scales; traffic-light nutrient levels; a nutrition table with a per-100 g / per-serving toggle that appears only when serving data exists; ingredients with declared allergens highlighted by whole word; saved products persisted in full, so that tab works offline; recent searches.
+**Never implying safety from missing data.** Most Open Food Facts records carry no ingredient list. Reporting those as "safe" to someone avoiding milk would be the worst thing this app could do, so they resolve to *"Not enough data to tell"*. `maybe-vegan` is likewise never rendered as vegan.
+
+**Absorbing a hostile API.** The search endpoint answers roughly one request in three with a 503 HTML page. The client sniffs non-JSON bodies and retries transient failures; `fields=` cuts a page from ~1 MB to ~3 KB; barcodes route to the far more reliable v2 endpoint.
+
+**Tests where the risk is** — decoding, the verdict engine, filters, and a `URLProtocol` stub that forces the exact failures the real API produces. They caught two real bugs: an index crash on a malformed tag, and a deadlock in the scanner.
 
 ## Tradeoffs
 
-- **No unit tests.** The lenient decoding is what I'd test first. I spent that time on the decoding itself and on preview fixtures built from real payloads.
-- **No barcode scanner.** The obvious next feature, but not verifiable in the simulator.
-- **No compare view.** Cut deliberately: it doubles the surface area for something most searches don't need.
+- Filters run over loaded results, not server-side. The API's own filtering is slow and unreliable; the UI says which it is.
+- Camera scanning can't be verified in a Simulator. The photo path exists partly so the flow can be.
+- No accounts or sync — out of scope here.

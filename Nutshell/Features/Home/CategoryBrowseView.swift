@@ -16,6 +16,7 @@ struct CategoryBrowseView: View {
     @State private var isShowingComparison = false
 
     @Environment(CompareStore.self) private var compare
+    @Environment(ProfileStore.self) private var profile
 
     init(category: BrowseCategory, service: FoodFactsService, recentSearches: RecentSearchesStore) {
         self.category = category
@@ -51,7 +52,7 @@ struct CategoryBrowseView: View {
         }
         .task { await viewModel.browse(category) }
         .sheet(isPresented: $isShowingFilters) {
-            SearchFilterSheet(filters: $filters, hasProfile: false)
+            SearchFilterSheet(filters: $filters, hasProfile: !profile.profile.isEmpty)
         }
         .sheet(isPresented: $isShowingComparison) {
             CompareView(products: compare.products)

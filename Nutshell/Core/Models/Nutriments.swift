@@ -92,22 +92,40 @@ enum NutritionBasis: String, CaseIterable, Identifiable, Sendable {
 /// back through the type-safe `Nutrient` accessors.
 struct Nutriments: Codable, Hashable, Sendable {
     private let values: [String: Double]
+    /// Qualifiers the label carries, keyed by nutrient name: `"<"`, `">"`, `"~"` and so on.
+    private let modifiers: [String: String]
 
-    init(values: [String: Double] = [:]) { self.values = values }
+    init(values: [String: Double] = [:], modifiers: [String: String] = [:]) {
+        self.values = values
+        self.modifiers = modifiers
+    }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: DynamicCodingKey.self)
         var parsed: [String: Double] = [:]
+        var qualifiers: [String: String] = [:]
+
         for key in container.allKeys {
-            // `*_unit`, `*_modifier`, and `*_label` are strings describing a value, not values.
-            guard !key.stringValue.hasSuffix("_unit"),
-                  !key.stringValue.hasSuffix("_modifier"),
-                  !key.stringValue.hasSuffix("_label") else { continue }
+            let name = key.stringValue
+
+            // A modifier says the number is a bound, not a measurement. Dropping it turns
+            // "less than 0.5 g of salt" into a flat "0.5 g", which is a different claim.
+            if name.hasSuffix("_modifier") {
+                if let symbol = try? container.decode(String.self, forKey: key), !symbol.isEmpty {
+                    qualifiers[String(name.dropLast("_modifier".count))] = symbol
+                }
+                continue
+            }
+
+            // `*_unit` and `*_label` describe a value rather than being one.
+            guard !name.hasSuffix("_unit"), !name.hasSuffix("_label") else { continue }
             if let value = try? container.decode(LenientDouble.self, forKey: key).value {
-                parsed[key.stringValue] = value
+                parsed[name] = value
             }
         }
+
         values = parsed
+        modifiers = qualifiers
     }
 
     func encode(to encoder: Encoder) throws {
@@ -115,6 +133,17 @@ struct Nutriments: Codable, Hashable, Sendable {
         for (key, value) in values {
             try container.encode(value, forKey: DynamicCodingKey(key))
         }
+        for (key, symbol) in modifiers {
+            try container.encode(symbol, forKey: DynamicCodingKey(key + "_modifier"))
+        }
+    }
+
+    /// The qualifier attached to a nutrient, if the label gave one.
+    func modifier(for nutrient: Nutrient) -> String? {
+        for key in nutrient.apiKeys {
+            if let symbol = modifiers[key] { return symbol }
+        }
+        return nil
     }
 
     /// The amount of a nutrient for the given basis, or `nil` when the contributor
@@ -131,7 +160,11 @@ struct Nutriments: Codable, Hashable, Sendable {
     }
 
     func formattedAmount(of nutrient: Nutrient, per basis: NutritionBasis) -> String? {
-        amount(of: nutrient, per: basis).map(nutrient.unit.format)
+        guard let amount = amount(of: nutrient, per: basis) else { return nil }
+        let rendered = nutrient.unit.format(amount)
+        // "< 0.5 g" is what the packet says; "0.5 g" is a claim the packet did not make.
+        guard let symbol = modifier(for: nutrient), symbol != "=" else { return rendered }
+        return "\(symbol) \(rendered)"
     }
 
     /// Whether there is anything worth rendering a nutrition table for.

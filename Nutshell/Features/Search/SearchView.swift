@@ -6,7 +6,6 @@ struct SearchView: View {
     @State private var isShowingFilters = false
     @State private var isShowingComparison = false
 
-    @Environment(SavedProductsStore.self) private var saved
     @Environment(CompareStore.self) private var compare
     @Environment(ProfileStore.self) private var profile
     @Environment(RecentSearchesStore.self) private var recentSearches

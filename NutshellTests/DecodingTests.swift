@@ -88,6 +88,33 @@ struct NutrimentsTests {
         #expect(NutrientUnit.grams.format(0).contains("mg") == false)
     }
 
+    @Test("A qualified value is shown as a bound, not as a measurement")
+    func modifiersAreKept() throws {
+        // Open Food Facts marks "less than 0.5 g" with a separate modifier field.
+        // Dropping it turns a bound into a claim the label never made.
+        let n = try nutriments(#"{"salt_100g": 0.5, "salt_modifier": "<", "fat_100g": 3.2}"#)
+
+        #expect(n.modifier(for: .salt) == "<")
+        #expect(n.formattedAmount(of: .salt, per: .perHundred)?.hasPrefix("< ") == true)
+        // The underlying number is untouched, so filtering and comparison still work.
+        #expect(n.amount(of: .salt, per: .perHundred) == 0.5)
+        // A nutrient with no modifier renders exactly as before.
+        #expect(n.formattedAmount(of: .fat, per: .perHundred) == "3.2 g")
+    }
+
+    @Test("An equals modifier adds nothing, since it is not a qualifier")
+    func equalsModifierIsIgnored() throws {
+        let n = try nutriments(#"{"fat_100g": 3.2, "fat_modifier": "="}"#)
+        #expect(n.formattedAmount(of: .fat, per: .perHundred) == "3.2 g")
+    }
+
+    @Test("Modifiers survive the round-trip the saved list depends on")
+    func modifiersRoundTrip() throws {
+        let original = try nutriments(#"{"salt_100g": 0.5, "salt_modifier": "<"}"#)
+        let restored = try JSONDecoder().decode(Nutriments.self, from: JSONEncoder().encode(original))
+        #expect(restored.modifier(for: .salt) == "<")
+    }
+
     @Test("Data presence is reported per basis")
     func dataPresence() throws {
         let hundredOnly = try nutriments(#"{"fat_100g": 3.2}"#)

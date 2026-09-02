@@ -40,11 +40,12 @@ struct SearchView: View {
             .task(id: viewModel.query) {
                 await viewModel.searchDebounced()
             }
-            .onChange(of: router.pendingQuery) { _, query in
-                guard let query else { return }
-                viewModel.query = query
-                router.pendingQuery = nil
-            }
+            // Both hooks are needed. `onChange` catches a hand-off while this tab is
+            // already alive; `onAppear` catches the first one after launch, when the tab
+            // is built *after* Home has already set the query and so never observes the
+            // change at all — the tile silently did nothing in that case.
+            .onAppear { consumePendingQuery() }
+            .onChange(of: router.pendingQuery) { _, _ in consumePendingQuery() }
             .sheet(isPresented: $isShowingFilters) {
                 SearchFilterSheet(filters: $filters, hasProfile: !profile.profile.isEmpty)
             }
@@ -52,6 +53,13 @@ struct SearchView: View {
                 CompareView(products: compare.products)
             }
         }
+    }
+
+    /// Takes a query handed over by another tab, if there is one.
+    private func consumePendingQuery() {
+        guard let pending = router.pendingQuery else { return }
+        viewModel.query = pending
+        router.pendingQuery = nil
     }
 
     @ToolbarContentBuilder

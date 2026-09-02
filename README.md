@@ -1,25 +1,29 @@
 # Nutshell
 
-*What's actually in your food, in a nutshell.*
+An iOS app for looking up food on Open Food Facts.
 
-A SwiftUI app over the Open Food Facts database. iOS 17+, Swift concurrency, no third-party packages. Open `Nutshell.xcodeproj`; `⌘U` runs the tests.
+SwiftUI, iOS 17+, no third-party packages. Open `Nutshell.xcodeproj` and run it. ⌘U runs the tests.
 
-## The thesis
+## What it does
 
-Search plus a detail view makes a database browser. The question people actually have in a shop is narrower — **is this one right for me?** — so everything serves that.
+Search for a product, tap it, see what's in it.
 
-Set your allergens and diets once in **You**, and every row, card, and detail screen is checked against them. **Scan** a barcode with the camera, or from a photo. **Compare** two or three products side by side, better figure in bold.
+You can also set your allergens and diets once in the You tab. After that every search result and product page gets checked against them, so you can tell whether something has milk in it without reading the whole ingredient list.
 
-## What I prioritised
+There's a barcode scanner, which works off the camera or off a photo. And a compare screen for putting two or three products next to each other.
 
-**Never implying safety from missing data.** Most Open Food Facts records carry no ingredient list. Reporting those as "safe" to someone avoiding milk would be the worst thing this app could do, so they resolve to *"Not enough data to tell"*. `maybe-vegan` is never rendered as vegan.
+## Why I built it this way
 
-**Absorbing a hostile API.** The endpoint the brief names answers roughly one request in three with a 503 HTML page — measured, repeatedly. So the client sniffs non-JSON bodies, retries transient failures, and falls back to Search-a-licious, the backend Open Food Facts now recommends. Barcodes route to v2, and a partial record tops itself up from there when opened.
+Most products in Open Food Facts are missing most of their data. If you avoid milk and a product has no ingredient list, the app says "not enough data to tell" instead of showing a green tick. I didn't want it guessing about that.
 
-**Tests where the risk is** — decoding, the verdict engine, cancellation, and a `URLProtocol` stub reproducing the API's real failures. They caught an index crash on a malformed tag, a scanner deadlock, and a search that wedged forever when cancelled mid-flight.
+The search endpoint in the brief is unreliable. Roughly one request in three came back as a 503 HTML page while I was testing. I kept it as the default and added the newer Search-a-licious backend underneath it as a fallback. Barcode lookups go to the v2 endpoint, which never failed on me.
 
-## Tradeoffs
+There are 106 tests, mostly covering the parsing and the allergen logic. They found a crash on a malformed tag and a search that would spin forever if you switched tabs while it was loading.
 
-- Filters run over loaded results, not server-side. The UI says which it is.
-- Camera scanning can't be verified in a Simulator; the photo path exists partly so the flow can be.
-- iPhone only. Nothing here adapts to iPad width, so it doesn't claim to.
+## Known limits
+
+Filters apply to the results already loaded, not to the whole database.
+
+Camera scanning can't be tested in the simulator. That's partly why the photo option exists.
+
+iPhone only. Nothing here is laid out for an iPad.

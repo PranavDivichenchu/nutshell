@@ -12,17 +12,21 @@ struct HomeView: View {
     @Environment(SavedProductsStore.self) private var saved
     @Environment(RecentlyViewedStore.self) private var recentlyViewed
 
-    /// Broad aisles rather than niche terms — each returns a dense, well-populated set,
-    /// which shows the database at its best rather than its patchiest.
-    private static let aisles: [(label: String, symbol: String, query: String)] = [
-        ("Breakfast", "sun.horizon", "cereal"),
-        ("Snacks", "takeoutbag.and.cup.and.straw", "crisps"),
-        ("Chocolate", "square.grid.2x2", "chocolate"),
-        ("Drinks", "cup.and.saucer", "sparkling water"),
-        ("Dairy", "drop", "yogurt"),
-        ("Bread", "birthday.cake", "bread"),
-        ("Pasta", "fork.knife", "pasta"),
-        ("Spreads", "circle.hexagongrid", "peanut butter"),
+    /// Each tile runs the search it is named after.
+    ///
+    /// These used to be aisle names mapped onto different queries — "Breakfast" ran
+    /// "cereal", "Dairy" ran "yogurt". Tapping one and landing on a search bar with a
+    /// different word in it just reads as a bug, so the label and the query are now the
+    /// same string. Broad terms, because they come back well populated.
+    private static let shortcuts: [(term: String, symbol: String)] = [
+        ("Cereal", "sun.horizon"),
+        ("Crisps", "takeoutbag.and.cup.and.straw"),
+        ("Chocolate", "square.grid.2x2"),
+        ("Yogurt", "drop"),
+        ("Bread", "basket"),
+        ("Pasta", "fork.knife"),
+        ("Peanut butter", "circle.hexagongrid"),
+        ("Sparkling water", "cup.and.saucer"),
     ]
 
     var body: some View {
@@ -42,7 +46,7 @@ struct HomeView: View {
                             shelf(title: "Saved", products: saved.products)
                         }
 
-                        aisleGrid
+                        shortcutGrid
                     }
                     .padding(Theme.Spacing.medium)
                 }
@@ -156,7 +160,7 @@ struct HomeView: View {
         }
     }
 
-    private var aisleGrid: some View {
+    private var shortcutGrid: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.small) {
             sectionTitle("Browse")
 
@@ -164,17 +168,19 @@ struct HomeView: View {
                 columns: [GridItem(.adaptive(minimum: 104), spacing: Theme.Spacing.small)],
                 spacing: Theme.Spacing.small
             ) {
-                ForEach(Self.aisles, id: \.label) { aisle in
+                ForEach(Self.shortcuts, id: \.term) { shortcut in
                     Button {
-                        router.search(for: aisle.query)
+                        router.search(for: shortcut.term)
                     } label: {
                         VStack(spacing: Theme.Spacing.tight) {
-                            Image(systemName: aisle.symbol)
+                            Image(systemName: shortcut.symbol)
                                 .font(.title3)
                                 .foregroundStyle(Theme.accent)
-                            Text(aisle.label)
+                                .accessibilityHidden(true)
+                            Text(shortcut.term)
                                 .font(.footnote.weight(.medium))
                                 .foregroundStyle(Theme.primaryText)
+                                .multilineTextAlignment(.center)
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, Theme.Spacing.medium)
@@ -185,6 +191,7 @@ struct HomeView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Search for \(shortcut.term)")
                 }
             }
         }

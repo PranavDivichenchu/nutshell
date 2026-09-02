@@ -56,7 +56,7 @@ struct FallbackServiceTests {
 
     private struct Stub: FoodFactsService {
         var result: Result<SearchPage, Error>
-        func search(_ query: String, page: Int) async throws -> SearchPage { try result.get() }
+        func search(_ query: ProductQuery, page: Int) async throws -> SearchPage { try result.get() }
         func product(barcode: String) async throws -> Product? { nil }
     }
 
@@ -71,7 +71,7 @@ struct FallbackServiceTests {
             primary: Stub(result: .success(try page("primary"))),
             fallback: Stub(result: .success(try page("fallback")))
         )
-        let result = try await service.search("oat", page: 1)
+        let result = try await service.search(.text("oat"), page: 1)
         #expect(result.products.first?.code == "primary")
     }
 
@@ -83,7 +83,7 @@ struct FallbackServiceTests {
             primary: Stub(result: .failure(error)),
             fallback: Stub(result: .success(try page("fallback")))
         )
-        let result = try await service.search("oat", page: 1)
+        let result = try await service.search(.text("oat"), page: 1)
         #expect(result.products.first?.code == "fallback")
     }
 
@@ -97,7 +97,7 @@ struct FallbackServiceTests {
             primary: Stub(result: .failure(error)),
             fallback: Stub(result: .success(try page("fallback")))
         )
-        await #expect(throws: error) { try await service.search("oat", page: 1) }
+        await #expect(throws: error) { try await service.search(.text("oat"), page: 1) }
     }
 }
 

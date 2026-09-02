@@ -8,26 +8,11 @@ import SwiftUI
 /// at, or browse.
 struct HomeView: View {
     @Environment(AppRouter.self) private var router
+    @Environment(\.foodFactsService) private var service
+    @Environment(RecentSearchesStore.self) private var recentSearches
     @Environment(ProfileStore.self) private var profile
     @Environment(SavedProductsStore.self) private var saved
     @Environment(RecentlyViewedStore.self) private var recentlyViewed
-
-    /// Each tile runs the search it is named after.
-    ///
-    /// These used to be aisle names mapped onto different queries — "Breakfast" ran
-    /// "cereal", "Dairy" ran "yogurt". Tapping one and landing on a search bar with a
-    /// different word in it just reads as a bug, so the label and the query are now the
-    /// same string. Broad terms, because they come back well populated.
-    private static let shortcuts: [(term: String, symbol: String)] = [
-        ("Cereal", "sun.horizon"),
-        ("Crisps", "takeoutbag.and.cup.and.straw"),
-        ("Chocolate", "square.grid.2x2"),
-        ("Yogurt", "drop"),
-        ("Bread", "basket"),
-        ("Pasta", "fork.knife"),
-        ("Peanut butter", "circle.hexagongrid"),
-        ("Sparkling water", "cup.and.saucer"),
-    ]
 
     var body: some View {
         NavigationStack {
@@ -53,6 +38,9 @@ struct HomeView: View {
             }
             .navigationTitle("Nutshell")
             .navigationDestination(for: Product.self) { ProductDetailView(searchResult: $0) }
+            .navigationDestination(for: BrowseCategory.self) { category in
+                CategoryBrowseView(category: category, service: service, recentSearches: recentSearches)
+            }
         }
     }
 
@@ -168,16 +156,14 @@ struct HomeView: View {
                 columns: [GridItem(.adaptive(minimum: 104), spacing: Theme.Spacing.small)],
                 spacing: Theme.Spacing.small
             ) {
-                ForEach(Self.shortcuts, id: \.term) { shortcut in
-                    Button {
-                        router.search(for: shortcut.term)
-                    } label: {
+                ForEach(BrowseCategory.all) { category in
+                    NavigationLink(value: category) {
                         VStack(spacing: Theme.Spacing.tight) {
-                            Image(systemName: shortcut.symbol)
+                            Image(systemName: category.symbol)
                                 .font(.title3)
                                 .foregroundStyle(Theme.accent)
                                 .accessibilityHidden(true)
-                            Text(shortcut.term)
+                            Text(category.name)
                                 .font(.footnote.weight(.medium))
                                 .foregroundStyle(Theme.primaryText)
                                 .multilineTextAlignment(.center)
@@ -191,7 +177,6 @@ struct HomeView: View {
                         }
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Search for \(shortcut.term)")
                 }
             }
         }

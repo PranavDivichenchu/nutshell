@@ -32,6 +32,9 @@ final class SearchViewModel {
     private var currentPage = 1
     private var hasMorePages = false
 
+    /// The heading shown above category results.
+    private(set) var title: String?
+
     /// The query whose results are currently on screen.
     ///
     /// Deliberately only assigned once a search *completes*. An earlier version recorded
@@ -39,7 +42,7 @@ final class SearchViewModel {
     /// left the term recorded with no results and no request outstanding, and the
     /// de-duplication guard below then refused to ever run it again. The screen sat on
     /// the loading skeleton forever.
-    private var completedQuery = ""
+    private var completedQuery: ProductQuery?
 
     /// Identifies the newest request. Responses carrying a stale token are dropped, so a
     /// slow earlier search can never overwrite a newer one's results.
@@ -70,7 +73,7 @@ final class SearchViewModel {
 
         // Skip only when this query's results are genuinely on screen — not merely
         // because it was attempted once.
-        if trimmed == completedQuery, case .results = phase { return }
+        if completedQuery == .text(trimmed), case .results = phase { return }
 
         do {
             try await Task.sleep(for: Self.debounce)
@@ -78,37 +81,57 @@ final class SearchViewModel {
             return // Superseded by a newer keystroke.
         }
 
-        await performSearch(trimmed)
+        await load(.text(trimmed))
     }
 
     /// Runs the current query immediately, skipping the debounce. Used by the retry
     /// button and by tapping a recent search.
     func searchNow() async {
         guard let trimmed = query.trimmed.nilIfBlank else { return }
-        await performSearch(trimmed)
+        await load(.text(trimmed))
     }
 
-    private func performSearch(_ term: String) async {
+    /// Re-runs whatever is currently on screen. Used by the error state's retry button,
+    /// which has to work for a category as well as for typed text.
+    func retry() async {
+        if let request = completedQuery {
+            await load(request)
+        } else if let trimmed = query.trimmed.nilIfBlank {
+            await load(.text(trimmed))
+        }
+    }
+
+    /// Loads a category once. Browse screens call this instead of typing into a field,
+    /// so there is nothing to debounce.
+    func browse(_ category: BrowseCategory) async {
+        guard completedQuery != category.query || phase == .idle else { return }
+        title = category.name
+        await load(category.query)
+    }
+
+    private func load(_ request: ProductQuery) async {
+        completedQuery = nil   // a retry of the same request must not be short-circuited
         currentToken &+= 1
         let token = currentToken
 
         phase = .searching
 
         do {
-            let page = try await service.search(term, page: 1)
+            let page = try await service.search(request, page: 1)
             // A response that has been superseded must not touch any state.
             guard token == currentToken, !Task.isCancelled else { return }
 
             loadedProducts = page.products
             currentPage = page.page
             hasMorePages = page.hasMorePages
-            completedQuery = term
+            completedQuery = request
 
             if page.products.isEmpty {
-                phase = .noResults(query: term)
+                phase = .noResults(query: request.searchText ?? title ?? "")
             } else {
                 phase = .results(page.products, total: page.totalCount)
-                recentSearches.record(term)
+                // Only what someone actually typed belongs in their search history.
+                if let typed = request.searchText { recentSearches.record(typed) }
             }
         } catch is CancellationError {
             // Leave `completedQuery` untouched so this term can be attempted again.
@@ -139,8 +162,10 @@ final class SearchViewModel {
         isLoadingMore = true
         defer { isLoadingMore = false }
 
+        guard let request = completedQuery else { return }
+
         do {
-            let next = try await service.search(completedQuery, page: currentPage + 1)
+            let next = try await service.search(request, page: currentPage + 1)
             guard token == currentToken, !Task.isCancelled, case .results = phase else { return }
 
             // The API can repeat products across pages; de-duplicate by barcode so
@@ -176,7 +201,7 @@ final class SearchViewModel {
     private func reset() {
         currentToken &+= 1   // abandon anything in flight
         loadedProducts = []
-        completedQuery = ""
+        completedQuery = nil
         currentPage = 1
         hasMorePages = false
         phase = .idle

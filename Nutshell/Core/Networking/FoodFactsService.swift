@@ -5,7 +5,7 @@ import SwiftUI
 protocol FoodFactsService: Sendable {
     /// - Parameter page: 1-indexed, matching the API's own paging.
     /// - Throws: `APIError` for anything presentable, `CancellationError` when superseded.
-    func search(_ query: String, page: Int) async throws -> SearchPage
+    func search(_ query: ProductQuery, page: Int) async throws -> SearchPage
 
     /// Looks up a single product by barcode.
     /// - Returns: `nil` when the barcode is well-formed but absent from the database,

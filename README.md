@@ -1,29 +1,25 @@
 # Nutshell
 
-An iOS app for looking up food on Open Food Facts.
+An iOS app for looking up what's actually in your food.
 
 SwiftUI, iOS 17+, no third-party packages. Open `Nutshell.xcodeproj` and run it. ⌘U runs the tests.
 
 ## What it does
 
-Search for a product, tap it, see what's in it.
+You search for a product and tap it to see what's in it.
 
-You can also set your allergens and diets once in the You tab. After that every search result and product page gets checked against them, so you can tell whether something has milk in it without reading the whole ingredient list.
+The part I actually built it around is different. You set your allergens and diets once in the You tab, and after that every result and product page gets checked against them. If something has milk in it you see that on the row, before you open it.
 
-There's a barcode scanner, which works off the camera or off a photo. And a compare screen for putting two or three products next to each other.
+There's also a barcode scanner that reads from the camera or a photo, and a compare screen for putting two or three products side by side.
 
 ## Why I built it this way
 
-Most products in Open Food Facts are missing most of their data. If you avoid milk and a product has no ingredient list, the app says "not enough data to tell" instead of showing a green tick. I didn't want it guessing about that.
+Most of Open Food Facts is missing data. Volunteers fill it in, so plenty of products have a name and nothing else. If you avoid milk and a product has no ingredient list, the app says it can't check instead of showing a green tick. I'd rather it admit that than be confidently wrong about an allergy.
 
-The search endpoint in the brief is unreliable. Roughly one request in three came back as a 503 HTML page while I was testing. I kept it as the default and added the newer Search-a-licious backend underneath it as a fallback. Barcode lookups go to the v2 endpoint, which never failed on me.
+Browsing and searching are deliberately separate. Typing "cereal" matches names, brands and ingredients, so you get cereal bars and cookies mixed in. The Cereal tile filters the real category and returns corn flakes and muesli.
 
-There are 106 tests, mostly covering the parsing and the allergen logic. They found a crash on a malformed tag and a search that would spin forever if you switched tabs while it was loading.
+The search endpoint in the brief goes down constantly. Roughly one in three requests came back as a 503, so I kept it as the default and put the newer Search-a-licious backend behind it. Barcodes go to the v2 endpoint, which never failed on me.
 
-## Known limits
+Filters run over results you already have rather than going back to the API, which is unreliable enough as it is.
 
-Filters apply to the results already loaded, not to the whole database.
-
-Camera scanning can't be tested in the simulator. That's partly why the photo option exists.
-
-iPhone only. Nothing here is laid out for an iPad.
+I wrote 108 tests, mostly around parsing and the allergen logic, since that's where being wrong costs something.

@@ -7,7 +7,7 @@ import Foundation
 final class ScriptedService: FoodFactsService, @unchecked Sendable {
     private let lock = NSLock()
     private var responses: [Result<SearchPage, Error>]
-    private(set) var calls: [(query: String, page: Int)] = []
+    private(set) var calls: [(query: ProductQuery, page: Int)] = []
 
     init(_ responses: [Result<SearchPage, Error>]) {
         self.responses = responses
@@ -26,7 +26,7 @@ final class ScriptedService: FoodFactsService, @unchecked Sendable {
 
     func product(barcode: String) async throws -> Product? { nil }
 
-    func search(_ query: String, page: Int) async throws -> SearchPage {
+    func search(_ query: ProductQuery, page: Int) async throws -> SearchPage {
         lock.lock()
         calls.append((query, page))
         let response = responses.count > 1 ? responses.removeFirst() : (responses.first ?? .success(.empty))

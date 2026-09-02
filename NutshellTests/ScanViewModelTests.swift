@@ -15,7 +15,7 @@ final class ScanStubService: FoodFactsService, @unchecked Sendable {
         return lookedUp.count
     }
 
-    func search(_ query: String, page: Int) async throws -> SearchPage { .empty }
+    func search(_ query: ProductQuery, page: Int) async throws -> SearchPage { .empty }
 
     func product(barcode: String) async throws -> Product? {
         lock.lock(); lookedUp.append(barcode); lock.unlock()

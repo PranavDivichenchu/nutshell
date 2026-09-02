@@ -39,10 +39,16 @@ struct SearchALiciousClient: FoodFactsService {
         try await productLookup.product(barcode: barcode)
     }
 
-    func search(_ query: String, page: Int) async throws -> SearchPage {
+    func search(_ query: ProductQuery, page: Int) async throws -> SearchPage {
+        // Lucene syntax, so a category becomes a field match rather than free text.
+        let expression = switch query {
+        case .text(let terms): terms
+        case .category(let tag): "categories_tags:\"\(tag)\""
+        }
+
         var components = URLComponents(string: "https://search.openfoodfacts.org/search")!
         components.queryItems = [
-            URLQueryItem(name: "q", value: query),
+            URLQueryItem(name: "q", value: expression),
             URLQueryItem(name: "page", value: String(page)),
             URLQueryItem(name: "page_size", value: String(Self.pageSize)),
             URLQueryItem(name: "fields", value: Self.fields),

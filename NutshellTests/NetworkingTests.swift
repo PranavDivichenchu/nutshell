@@ -90,7 +90,7 @@ struct OpenFoodFactsClientTests {
     func decodesPage() async throws {
         StubURLProtocol.script([.json(Self.twoProducts)])
 
-        let page = try await makeClient().search("oat", page: 1)
+        let page = try await makeClient().search(.text("oat"), page: 1)
 
         #expect(page.products.count == 2)
         #expect(page.totalCount == 42)
@@ -106,7 +106,7 @@ struct OpenFoodFactsClientTests {
           [{"code":"9","product_name":"Last"}]}
         """)])
 
-        let page = try await makeClient().search("oat", page: 3)
+        let page = try await makeClient().search(.text("oat"), page: 3)
         #expect(page.hasMorePages == false)
     }
 
@@ -120,7 +120,7 @@ struct OpenFoodFactsClientTests {
         ]}
         """)])
 
-        let page = try await makeClient().search("oat", page: 1)
+        let page = try await makeClient().search(.text("oat"), page: 1)
 
         #expect(page.products.count == 1)
         #expect(page.products.first?.code == "1")
@@ -133,7 +133,7 @@ struct OpenFoodFactsClientTests {
         StubURLProtocol.script([.maintenanceHTML(status: 200)])
 
         await #expect(throws: APIError.serviceUnavailable) {
-            try await makeClient().search("oat", page: 1)
+            try await makeClient().search(.text("oat"), page: 1)
         }
     }
 
@@ -145,7 +145,7 @@ struct OpenFoodFactsClientTests {
             .json(Self.twoProducts),
         ])
 
-        let page = try await makeClient().search("oat", page: 1)
+        let page = try await makeClient().search(.text("oat"), page: 1)
 
         #expect(page.products.count == 2)
         #expect(StubURLProtocol.requests.count == 2)   // it really did retry
@@ -156,7 +156,7 @@ struct OpenFoodFactsClientTests {
         StubURLProtocol.script([.maintenanceHTML(status: 503)])
 
         await #expect(throws: APIError.serviceUnavailable) {
-            try await makeClient().search("oat", page: 1)
+            try await makeClient().search(.text("oat"), page: 1)
         }
         // One initial attempt plus two retries — not an unbounded loop.
         #expect(StubURLProtocol.requests.count == 3)
@@ -167,7 +167,7 @@ struct OpenFoodFactsClientTests {
         StubURLProtocol.script([.json("{}", status: 404)])
 
         await #expect(throws: APIError.unexpected(statusCode: 404)) {
-            try await makeClient().search("oat", page: 1)
+            try await makeClient().search(.text("oat"), page: 1)
         }
         #expect(StubURLProtocol.requests.count == 1)   // retrying a 404 would be pointless
     }
@@ -177,7 +177,7 @@ struct OpenFoodFactsClientTests {
         StubURLProtocol.script([.json(#"{"products": "not an array"}"#)])
 
         await #expect(throws: APIError.unreadableResponse) {
-            try await makeClient().search("oat", page: 1)
+            try await makeClient().search(.text("oat"), page: 1)
         }
         #expect(StubURLProtocol.requests.count == 1)
     }
@@ -185,7 +185,7 @@ struct OpenFoodFactsClientTests {
     @Test("The request carries the query, paging, field projection and a User-Agent")
     func requestShape() async throws {
         StubURLProtocol.script([.json(Self.twoProducts)])
-        _ = try await makeClient().search("dark chocolate", page: 2)
+        _ = try await makeClient().search(.text("dark chocolate"), page: 2)
 
         let request = try #require(StubURLProtocol.requests.first)
         let url = try #require(request.url?.absoluteString)
@@ -203,6 +203,39 @@ struct OpenFoodFactsClientTests {
         #expect(items["fields"]?.contains("nutriscore_grade") == true)
         // Open Food Facts throttles clients that don't identify themselves.
         #expect(request.value(forHTTPHeaderField: "User-Agent")?.isEmpty == false)
+    }
+
+    @Test("A category is sent as a tag filter, not as free text")
+    func categoryQueryShape() async throws {
+        StubURLProtocol.script([.json(Self.twoProducts)])
+        _ = try await makeClient().search(.category("en:breakfast-cereals"), page: 1)
+
+        let request = try #require(StubURLProtocol.requests.first)
+        let url = try #require(request.url?.absoluteString)
+        let components = try #require(URLComponents(string: url))
+        let items = Dictionary(
+            uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") }
+        )
+
+        // Searching the word "cereal" returns cereal bars and oatmeal cookies; filtering
+        // the category returns the category. These must not be the same request.
+        #expect(items["search_terms"] == nil)
+        #expect(items["tagtype_0"] == "categories")
+        #expect(items["tag_contains_0"] == "contains")
+        // The legacy endpoint wants the slug without its language prefix.
+        #expect(items["tag_0"] == "breakfast-cereals")
+    }
+
+    @Test("Every browse category carries a language-prefixed tag")
+    func browseCategoriesAreWellFormed() {
+        #expect(BrowseCategory.all.isEmpty == false)
+        for category in BrowseCategory.all {
+            #expect(category.tag.hasPrefix("en:"), "\(category.name) tag \(category.tag)")
+            #expect(category.name.isEmpty == false)
+            #expect(Tag.slug(from: category.tag).isEmpty == false)
+        }
+        // Tags must be unique, or two tiles would open the same list.
+        #expect(Set(BrowseCategory.all.map(\.tag)).count == BrowseCategory.all.count)
     }
 
     @Test("Only genuinely transient failures are marked retryable")

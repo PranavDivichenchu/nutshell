@@ -30,7 +30,7 @@ struct OpenFoodFactsClient: FoodFactsService {
         self.session = session
     }
 
-    func search(_ query: String, page: Int) async throws -> SearchPage {
+    func search(_ query: ProductQuery, page: Int) async throws -> SearchPage {
         let request = try Self.makeRequest(query: query, page: page)
         var attempt = 0
 
@@ -137,10 +137,23 @@ struct OpenFoodFactsClient: FoodFactsService {
 
     // MARK: - Request building
 
-    private static func makeRequest(query: String, page: Int) throws -> URLRequest {
+    private static func makeRequest(query: ProductQuery, page: Int) throws -> URLRequest {
         var components = URLComponents(string: "https://world.openfoodfacts.org/cgi/search.pl")!
-        components.queryItems = [
-            URLQueryItem(name: "search_terms", value: query),
+
+        let selector: [URLQueryItem] = switch query {
+        case .text(let terms):
+            [URLQueryItem(name: "search_terms", value: terms)]
+        case .category(let tag):
+            // The legacy endpoint filters by tag rather than by free text.
+            [
+                URLQueryItem(name: "action", value: "process"),
+                URLQueryItem(name: "tagtype_0", value: "categories"),
+                URLQueryItem(name: "tag_contains_0", value: "contains"),
+                URLQueryItem(name: "tag_0", value: Tag.slug(from: tag)),
+            ]
+        }
+
+        components.queryItems = selector + [
             URLQueryItem(name: "json", value: "1"),
             URLQueryItem(name: "page_size", value: String(pageSize)),
             URLQueryItem(name: "page", value: String(page)),

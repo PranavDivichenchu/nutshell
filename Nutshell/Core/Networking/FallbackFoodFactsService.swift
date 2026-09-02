@@ -13,7 +13,7 @@ struct FallbackFoodFactsService: FoodFactsService {
     let primary: FoodFactsService
     let fallback: FoodFactsService
 
-    func search(_ query: String, page: Int) async throws -> SearchPage {
+    func search(_ query: ProductQuery, page: Int) async throws -> SearchPage {
         do {
             return try await primary.search(query, page: page)
         } catch let error as APIError where error.isWorthFallingBackFrom {

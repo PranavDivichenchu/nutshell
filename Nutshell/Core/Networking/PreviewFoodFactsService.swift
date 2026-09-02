@@ -9,7 +9,7 @@ struct PreviewFoodFactsService: FoodFactsService {
     var result: Result<SearchPage, Error> = .success(.preview)
     var delay: Duration = .milliseconds(400)
 
-    func search(_ query: String, page: Int) async throws -> SearchPage {
+    func search(_ query: ProductQuery, page: Int) async throws -> SearchPage {
         try await Task.sleep(for: delay)
         return try result.get()
     }
